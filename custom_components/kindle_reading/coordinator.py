@@ -223,6 +223,19 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
                     device=known.get("device"),
                 )
             else:
+                last_read = progress.sync_time
+                if last_read is None:
+                    # No sync time from Amazon: if the place moved, it was just read.
+                    prev = known.get("last_read")
+                    moved = (
+                        progress.position is not None
+                        and known.get("position") is not None
+                        and progress.position != known.get("position")
+                    )
+                    if moved:
+                        last_read = now
+                    elif prev:
+                        last_read = dt_util.parse_datetime(prev)
                 book = Book(
                     asin=item.asin,
                     title=item.title,
@@ -231,7 +244,7 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
                     percent=progress.percent,
                     position=progress.position,
                     end_position=progress.end_position,
-                    last_read=progress.sync_time,
+                    last_read=last_read,
                     device=progress.device_name,
                 )
             books.append(book)

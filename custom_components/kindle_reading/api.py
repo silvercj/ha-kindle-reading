@@ -29,6 +29,43 @@ TIMEOUT = 30
 _JSONP_RE = re.compile(r"\((\{.*\})\)", re.DOTALL)
 # The reader page embeds its session: var deviceToken = {"deviceName":...,"deviceSessionToken":...};
 _PAGE_TOKEN_RE = re.compile(r"var\s+deviceToken\s*=\s*(\{.*?\})\s*;", re.DOTALL)
+# Newer (KFX) books: the book page embeds "mostRecentPositionRead":172321.
+_PAGE_POS_RE = re.compile(r'"mostRecentPositionRead"\s*:\s*(-?\d+)')
+_PAGE_TIME_RE = re.compile(r'"(\w*(?:[Tt]ime|[Dd]ate|[Ss]ync)\w*)"\s*:\s*"?(\d{12,13})"?')
+_PAGE_END_RE = re.compile(
+    r'"(?:endPosition|maxPosition|lastPosition|totalPositions|bookEndPosition)"\s*:\s*(\d+)'
+)
+_PAGE_KEY_RE = re.compile(r'"(\w{3,40})"\s*:')
+
+
+def _unescape_page(text: str) -> str:
+    """The page embeds JSON inside JS strings: \\x22 for quotes, \\/ for slashes."""
+    return text.replace("\\x22", '"').replace("\\u0022", '"').replace('\\"', '"').replace("\\/", "/")
+
+
+def parse_page_progress(text: str) -> dict[str, Any]:
+    """Position (and any time/end nearby) from a book page. No credentials kept."""
+    page = _unescape_page(text)
+    match = _PAGE_POS_RE.search(page)
+    if not match:
+        return {}
+    result: dict[str, Any] = {"position": int(match.group(1))}
+    lo, hi = max(0, match.start() - 1500), match.end() + 1500
+    window = page[lo:hi]
+    now_ms = datetime.now(UTC).timestamp() * 1000
+    times = [
+        (name, int(val))
+        for name, val in _PAGE_TIME_RE.findall(window)
+        if "expir" not in name.lower() and 0 < now_ms - int(val) < 3 * 365 * 86400 * 1000
+    ]
+    if times:
+        result["time_key"], result["time"] = max(times, key=lambda t: t[1])
+    end = _PAGE_END_RE.search(window)
+    if end:
+        result["end"] = int(end.group(1))
+    # Key names only (never values) to learn the shape safely.
+    result["keys"] = sorted(set(_PAGE_KEY_RE.findall(page[max(0, match.start() - 600) : hi])))[:60]
+    return result
 
 
 class KindleError(Exception):
@@ -383,12 +420,19 @@ class KindleClient:
             position = int(raw_pos) if raw_pos not in (None, "") else None
             sync_time = _sync_time(last.get("syncTime"))
             device_name = last.get("deviceName")
+        page: dict[str, Any] = {}
+        if position is None:
+            page = await self._page_progress(asin)
+            position = page.get("position")
+            sync_time = _sync_time(page.get("time"))
         start, end = 0, None
         meta_url = info.get("metadataUrl")
         if asin in self._metadata:
             start, end = self._metadata[asin]
         elif meta_url:
             start, end = await self._get_metadata(meta_url)
+            if not end and page.get("end"):
+                end = page["end"]
             if end:
                 self._metadata[asin] = (start, end)
         return BookProgress(
@@ -400,14 +444,46 @@ class KindleClient:
             device_name=device_name,
         )
 
+    async def _page_progress(self, asin: str) -> dict[str, Any]:
+        """Fallback for books whose startReading has no lastPageReadData."""
+        try:
+            status, text = await self._get(f"{self._base}/?asin={asin}")
+        except KindleAuthError:
+            raise
+        except KindleError as err:
+            _LOGGER.debug("Book page %s failed: %s", asin, err)
+            return {}
+        if status != 200:
+            _LOGGER.debug("Book page %s returned HTTP %s", asin, status)
+            return {}
+        found = parse_page_progress(text)
+        _LOGGER.debug(
+            "Book page %s: pos=%s time=%s(%s) end=%s keys=%s",
+            asin,
+            found.get("position"),
+            found.get("time"),
+            found.get("time_key"),
+            found.get("end"),
+            found.get("keys"),
+        )
+        return found
+
     async def _get_metadata(self, url: str) -> tuple[int, int | None]:
         status, text = await self._get(url, referer=False)
         if status != 200:
+            _LOGGER.debug("Metadata returned HTTP %s", status)
             return 0, None
         match = _JSONP_RE.search(text)
         try:
             meta = json.loads(match.group(1) if match else text)
         except ValueError:
+            _LOGGER.debug("Metadata not JSON, starts %r", text[:120])
+            return 0, None
+        if not isinstance(meta, dict) or not meta.get("endPosition"):
+            _LOGGER.debug(
+                "Metadata has no endPosition; keys=%s",
+                sorted(meta)[:40] if isinstance(meta, dict) else type(meta).__name__,
+            )
             return 0, None
         start = int(meta.get("startPosition") or 0)
         end = meta.get("endPosition")

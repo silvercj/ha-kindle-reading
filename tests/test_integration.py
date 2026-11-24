@@ -174,3 +174,21 @@ async def test_session_token_from_page():
     assert p.percent == 50.0 and p.device_name == "Paperwhite"
     assert p.sync_time.year == 2026
     assert any("read.amazon.co.uk/?asin=B0HKTKYX57" in u for u, _ in calls)
+
+
+def test_page_progress_from_escaped_json():
+    from custom_components.kindle_reading.api import parse_page_progress
+    import time
+
+    now = int(time.time() * 1000) - 60000
+    page = (
+        "x = JSON.parse('{\\x22token\\x22:{\\x22expiration\\x22:1795528470262}},"
+        "\\x22mostRecentPositionRead\\x22:172321,\\x22contentId\\x22:\\x22B0HKTKYX57\\x22,"
+        f"\\x22lastUpdatedTime\\x22:{now},\\x22endPosition\\x22:400000}}');"
+    )
+    found = parse_page_progress(page)
+    assert found["position"] == 172321
+    assert found["time"] == now
+    assert found["end"] == 400000
+    assert "contentId" in found["keys"]
+    assert parse_page_progress("<html>nothing</html>") == {}
