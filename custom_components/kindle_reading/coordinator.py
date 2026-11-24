@@ -42,7 +42,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 # Pause between per-book calls, to stay gentle with Amazon.
-REQUEST_GAP = 1.5
+REQUEST_GAP = 1.0
+# Older books checked per poll until the first SEED_BOOKS are known.
+SEED_PER_POLL = 5
 
 
 @dataclass
@@ -131,10 +133,20 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
             self._state.setdefault("seeded", False)
         return self._state
 
-    async def _fetch(self, count: int) -> list[tuple[LibraryBook, BookProgress | None]]:
-        library = await self.client.async_get_library(max(count, 10))
+    async def _fetch(
+        self, count: int, state: dict[str, Any]
+    ) -> list[tuple[LibraryBook, BookProgress | None]]:
+        seeding = not state["seeded"]
+        library = await self.client.async_get_library(SEED_BOOKS if seeding else max(count, 10))
+        targets = library[:count]
+        if seeding:
+            # Backfill older books a few per poll, so setup stays quick.
+            unseen = [b for b in library[count:SEED_BOOKS] if b.asin not in state["books"]]
+            targets += unseen[:SEED_PER_POLL]
+            if len(unseen) <= SEED_PER_POLL:
+                state["seed_done"] = True
         results: list[tuple[LibraryBook, BookProgress | None]] = []
-        for index, item in enumerate(library[:count]):
+        for index, item in enumerate(targets):
             if index:
                 await asyncio.sleep(REQUEST_GAP)
             try:
@@ -149,9 +161,9 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
 
     async def _async_update_data(self) -> KindleData:
         state = await self._load_state()
-        count = self._books_to_check if state["seeded"] else SEED_BOOKS
+        count = self._books_to_check
         try:
-            fetched = await self._fetch(count)
+            fetched = await self._fetch(count, state)
         except KindleAuthError as err:
             raise ConfigEntryAuthFailed(
                 "Amazon sign-in expired. Paste fresh cookies to reconnect."
@@ -210,7 +222,8 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
             books.append(book)
             self._track(state, book, known, today)
 
-        state["seeded"] = True
+        if state.pop("seed_done", False):
+            state["seeded"] = True
         await self._store.async_save(state)
 
         reading = [b for b in books if b.last_read]

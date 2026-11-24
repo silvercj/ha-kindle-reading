@@ -33,8 +33,9 @@ Notes:
 - Reading time is an estimate: Kindle positions are roughly characters of
   text, divided by a reading speed (default 1,500 a minute). Tune it in
   the options if it runs high or low.
-- The first run checks your 25 most recent books to find ones finished
-  this year. After that it checks the 5 most recent each poll.
+- Each poll checks your 5 most recent books. Until your 25 most recent
+  are known (to find ones finished this year), it also checks 5 older
+  ones per poll, so setup stays quick.
 
 ## Install (HACS)
 
