@@ -1,0 +1,12 @@
+{
+  "domain": "kindle_reading",
+  "name": "Kindle Reading",
+  "codeowners": ["@silvercj"],
+  "config_flow": true,
+  "documentation": "https://github.com/silvercj/ha-kindle-reading",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/silvercj/ha-kindle-reading/issues",
+  "requirements": ["curl-cffi==0.17.0"],
+  "version": "0.1.0"
+}

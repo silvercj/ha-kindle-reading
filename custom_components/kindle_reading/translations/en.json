@@ -1,0 +1,92 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect your Kindle library",
+        "description": "Uses the same private endpoints as the Kindle Cloud Reader, with your own Amazon sign-in cookies. Read-only. See the README for how to copy the cookies and device token from read.amazon.co.uk.",
+        "data": {
+          "region": "Amazon store",
+          "cookies": "Cookie header from read.amazon.*",
+          "device_token": "Device token (or the whole getDeviceToken URL)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect your Kindle library",
+        "description": "Amazon signed this session out. Paste a fresh Cookie header from the Kindle Cloud Reader. The device token can usually stay the same.",
+        "data": {
+          "cookies": "Cookie header from read.amazon.*",
+          "device_token": "Device token (optional)"
+        }
+      }
+    },
+    "error": {
+      "missing_cookies": "Those cookies have no Amazon sign-in token (at-...) or session-id. Copy the whole Cookie header from a request to read.amazon.*.",
+      "invalid_auth": "Amazon did not accept the cookies. Sign in to the Kindle Cloud Reader again and copy fresh ones.",
+      "invalid_device_token": "Amazon did not accept the device token.",
+      "blocked": "Amazon returned a bot check instead of data. Try again later.",
+      "cannot_connect": "Could not reach Amazon.",
+      "unknown": "Unexpected error. Check the logs."
+    },
+    "abort": {
+      "already_configured": "This Amazon account is already set up.",
+      "reauth_successful": "Reconnected."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kindle Reading options",
+        "data": {
+          "scan_interval": "Minutes between checks",
+          "reading_speed": "Reading speed (Kindle positions per minute)",
+          "finished_threshold": "Count a book as finished at",
+          "books_to_check": "Recent books to check each time"
+        },
+        "data_description": {
+          "reading_speed": "Used only for the estimated reading time. About 1,500 is an average adult pace; raise it if the estimate runs high."
+        }
+      }
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "uk": "Amazon.co.uk",
+        "us": "Amazon.com",
+        "ca": "Amazon.ca",
+        "de": "Amazon.de",
+        "fr": "Amazon.fr",
+        "es": "Amazon.es",
+        "it": "Amazon.it",
+        "au": "Amazon.com.au",
+        "in": "Amazon.in",
+        "jp": "Amazon.co.jp"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_book": {
+        "name": "Current book"
+      },
+      "current_book_progress": {
+        "name": "Current book progress"
+      },
+      "last_read": {
+        "name": "Last read"
+      },
+      "last_read_on": {
+        "name": "Last read on"
+      },
+      "reading_time_today": {
+        "name": "Reading time today"
+      },
+      "progress_today": {
+        "name": "Progress today"
+      },
+      "books_finished_this_year": {
+        "name": "Books finished this year"
+      }
+    }
+  }
+}
