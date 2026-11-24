@@ -133,6 +133,13 @@ def _authors(raw: Any) -> list[str]:
     return names
 
 
+def _num(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _sync_time(value: Any) -> datetime | None:
     if value in (None, "", 0):
         return None
@@ -353,8 +360,21 @@ class KindleClient:
         if not isinstance(info, dict):
             raise KindleBlockedError("Progress response was not an object")
         last = info.get("lastPageReadData")
+        if isinstance(last, str):
+            try:
+                last = json.loads(last)
+            except ValueError:
+                pass
+        if isinstance(last, list) and last and isinstance(last[0], dict):
+            # Newest entry first if Amazon returns several.
+            last = max(last, key=lambda e: _num(e.get("syncTime")) or 0)
         if not isinstance(last, dict):
-            _LOGGER.debug("startReading %s keys: %s", asin, sorted(info))
+            _LOGGER.debug(
+                "startReading %s lastPageReadData %s: %r",
+                asin,
+                type(last).__name__,
+                str(last)[:300],
+            )
         position: int | None = None
         sync_time = None
         device_name = None
