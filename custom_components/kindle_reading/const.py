@@ -19,7 +19,7 @@ MIN_SCAN_INTERVAL = 15
 # Kindle "positions" are roughly characters of text. An adult reading
 # ~250 words a minute at ~6 characters a word covers ~1,500 a minute.
 DEFAULT_READING_SPEED = 1500
-DEFAULT_FINISHED_THRESHOLD = 97
+DEFAULT_FINISHED_THRESHOLD = 90
 # How many of the most recent books are checked for progress each poll.
 DEFAULT_BOOKS_TO_CHECK = 5
 # How many recent books the first run checks to seed finished books.

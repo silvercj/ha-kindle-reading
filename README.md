@@ -24,7 +24,7 @@ Assistant sees the same up-to-date progress.
 | `sensor.kindle_last_read_on` | Which Kindle it synced from |
 | `sensor.kindle_reading_time_today` | **Estimated** minutes read today, from how far you moved through your books |
 | `sensor.kindle_progress_today` | % of a book read today (summed across books) |
-| `sensor.kindle_books_finished_this_year` | Books that passed 97% this year (list in attributes) |
+| `sensor.kindle_books_finished_this_year` | Books that passed 90% this year (end notes and acknowledgements mean you rarely hit 100%) (list in attributes) |
 
 Notes:
 
