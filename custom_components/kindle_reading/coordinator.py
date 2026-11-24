@@ -257,6 +257,11 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
         reading = [b for b in books if b.last_read]
         reading.sort(key=lambda b: b.last_read, reverse=True)  # type: ignore[arg-type,return-value]
         current = reading[0] if reading else (books[0] if books else None)
+        if books and books[0].last_read is None and books[0].position:
+            # Newer books carry no sync time; the library lists the most
+            # recently opened book first, so trust that over older timestamps.
+            if (books[0].percent or 0) < self._threshold:
+                current = books[0]
 
         delta_positions = 0
         progress_today = 0.0

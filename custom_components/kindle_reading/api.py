@@ -33,7 +33,11 @@ _PAGE_TOKEN_RE = re.compile(r"var\s+deviceToken\s*=\s*(\{.*?\})\s*;", re.DOTALL)
 _PAGE_POS_RE = re.compile(r'"mostRecentPositionRead"\s*:\s*(-?\d+)')
 _PAGE_TIME_RE = re.compile(r'"(\w*(?:[Tt]ime|[Dd]ate|[Ss]ync)\w*)"\s*:\s*"?(\d{12,13})"?')
 _PAGE_END_RE = re.compile(
-    r'"(?:endPosition|maxPosition|lastPosition|totalPositions|bookEndPosition)"\s*:\s*(\d+)'
+    r'"(?:endReadingPosition|endPosition|maxPosition|lastPosition|totalPositions|bookEndPosition)"'
+    r'\s*:\s*"?(\d+)'
+)
+_PAGE_END_NESTED_RE = re.compile(
+    r'"endReadingPosition"\s*:\s*\{[^{}]*?"(?:position|value|pos)"\s*:\s*"?(\d+)'
 )
 _PAGE_KEY_RE = re.compile(r'"(\w{3,40})"\s*:')
 
@@ -60,9 +64,12 @@ def parse_page_progress(text: str) -> dict[str, Any]:
     ]
     if times:
         result["time_key"], result["time"] = max(times, key=lambda t: t[1])
-    end = _PAGE_END_RE.search(window)
+    end = _PAGE_END_RE.search(page) or _PAGE_END_NESTED_RE.search(page)
     if end:
         result["end"] = int(end.group(1))
+    shape = page.find('"endReadingPosition"')
+    if shape >= 0:
+        result["end_shape"] = re.sub(r"[A-Za-z0-9+/=_-]{24,}", "<long>", page[shape : shape + 120])
     # Key names only (never values) to learn the shape safely.
     result["keys"] = sorted(set(_PAGE_KEY_RE.findall(page[max(0, match.start() - 600) : hi])))[:60]
     return result
@@ -466,6 +473,8 @@ class KindleClient:
             found.get("end"),
             found.get("keys"),
         )
+        if "end" not in found:
+            _LOGGER.debug("Book page %s end shape: %r", asin, found.get("end_shape"))
         return found
 
     async def _get_metadata(self, url: str) -> tuple[int, int | None]:
