@@ -131,6 +131,13 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
             self._state.setdefault("day", None)
             self._state.setdefault("day_start", {})
             self._state.setdefault("seeded", False)
+            if not self._state.get("finished_dates_fixed"):
+                # Before 0.2.8, books with no Amazon sync time were dated the
+                # day they were first seen. Those dates are unknown, not today.
+                for asin, entry in self._state["finished"].items():
+                    if not self._state["books"].get(asin, {}).get("last_read"):
+                        entry["finished"] = None
+                self._state["finished_dates_fixed"] = True
         return self._state
 
     async def async_state_snapshot(self) -> dict[str, Any]:
@@ -323,11 +330,16 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
             and book.percent >= self._threshold
             and book.asin not in state["finished"]
         ):
-            when = book.last_read or dt_util.utcnow()
+            # Date it from Amazon's sync time, or today if we watched it cross
+            # the line; otherwise it was finished before tracking began.
+            prev_pct = known.get("percent")
+            when = book.last_read
+            if when is None and prev_pct is not None and prev_pct < self._threshold:
+                when = dt_util.utcnow()
             state["finished"][book.asin] = {
                 "title": book.title,
                 "author": ", ".join(book.authors),
-                "finished": dt_util.as_local(when).date().isoformat(),
+                "finished": dt_util.as_local(when).date().isoformat() if when else None,
             }
 
     def _save_rotated_cookies(self) -> None:
