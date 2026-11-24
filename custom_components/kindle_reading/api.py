@@ -27,6 +27,8 @@ _LOGGER = logging.getLogger(__name__)
 CLIENT_VERSION = "20000100"
 TIMEOUT = 30
 _JSONP_RE = re.compile(r"\((\{.*\})\)", re.DOTALL)
+# The reader page embeds its session: var deviceToken = {"deviceName":...,"deviceSessionToken":...};
+_PAGE_TOKEN_RE = re.compile(r"var\s+deviceToken\s*=\s*(\{.*?\})\s*;", re.DOTALL)
 
 
 class KindleError(Exception):
@@ -177,6 +179,7 @@ class KindleClient:
             self._session.cookies.set(name, value, domain=self._cookie_domain)
         self._session_id_header: str | None = cookies.get("session-id")
         self._adp_token: str | None = None
+        self._page_asin: str | None = None
         self._metadata: dict[str, tuple[int, int]] = {}
 
     async def async_close(self) -> None:
@@ -247,6 +250,8 @@ class KindleClient:
         items = data.get("itemsList") if isinstance(data, dict) else None
         if items is None:
             raise KindleBlockedError("Library response had no itemsList")
+        if items and isinstance(items[0], dict) and items[0].get("asin"):
+            self._page_asin = items[0]["asin"]
         new_session = self.current_cookies().get("session-id")
         if new_session:
             self._session_id_header = new_session
@@ -267,7 +272,16 @@ class KindleClient:
         return books
 
     async def async_register_device(self) -> None:
-        """Swap the device token for a reader session token."""
+        """Get a reader session token.
+
+        The current Cloud Reader embeds it in the book page, so no device
+        token is needed. A pasted device token is the fallback.
+        """
+        self._adp_token = None
+        if await self._session_from_page():
+            return
+        if not self._device_token:
+            raise KindleDeviceTokenError("No reader session token on the page")
         url = (
             f"{self._base}/service/web/register/getDeviceToken"
             f"?serialNumber={self._device_token}&deviceType={self._device_token}"
@@ -284,21 +298,55 @@ class KindleClient:
             raise KindleDeviceTokenError("No deviceSessionToken in response")
         self._adp_token = token
 
+    async def _progress_get(self, url: str) -> tuple[int, str]:
+        """GET where a 401 means a stale reader token, not signed-out cookies."""
+        try:
+            return await self._get(url)
+        except KindleAuthError:
+            return 401, ""
+
+    async def _session_from_page(self) -> bool:
+        """Read deviceSessionToken from the reader page HTML."""
+        asin = self._page_asin
+        url = f"{self._base}/?asin={asin}" if asin else f"{self._base}/kindle-library"
+        status, text = await self._get(url)
+        if status != 200:
+            _LOGGER.debug("Reader page returned HTTP %s", status)
+            return False
+        match = _PAGE_TOKEN_RE.search(text)
+        if not match:
+            if "ap/signin" in text[:20000]:
+                raise KindleAuthError("Reader page asked for sign-in")
+            _LOGGER.debug("No deviceToken block on the reader page")
+            return False
+        try:
+            data = json.loads(match.group(1))
+        except ValueError:
+            _LOGGER.debug("deviceToken block was not JSON")
+            return False
+        token = data.get("deviceSessionToken") if isinstance(data, dict) else None
+        if not token:
+            return False
+        self._adp_token = token
+        return True
+
     async def async_get_progress(self, asin: str) -> BookProgress:
         """Whispersync position for one book."""
         if not self._adp_token:
+            if not self._page_asin:
+                self._page_asin = asin
             await self.async_register_device()
         url = (
             f"{self._base}/service/mobile/reader/startReading"
             f"?asin={asin}&clientVersion={CLIENT_VERSION}"
         )
-        status, text = await self._get(url)
-        if status == 403:
+        status, text = await self._progress_get(url)
+        if status != 200 or "ADP session" in text:
             # The reader session token may have expired; renew once.
             await self.async_register_device()
-            status, text = await self._get(url)
-        if status == 403:
-            raise KindleDeviceTokenError("Progress request forbidden (HTTP 403)")
+            status, text = await self._progress_get(url)
+        if status in (401, 403) or "ADP session" in text:
+            raise KindleDeviceTokenError(f"Progress request refused (HTTP {status})")
         if status != 200:
             raise KindleError(f"Progress request failed (HTTP {status})")
         info = _unwrap(self._json(text))

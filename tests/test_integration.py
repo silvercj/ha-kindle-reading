@@ -75,6 +75,7 @@ async def test_config_flow(hass: HomeAssistant):
     with (
         patch.object(KindleClient, "async_get_library", AsyncMock(return_value=lib(1))),
         patch.object(KindleClient, "async_register_device", AsyncMock()),
+        patch.object(KindleClient, "async_get_progress", AsyncMock()),
         patch("custom_components.kindle_reading.async_setup_entry", AsyncMock(return_value=True)),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -140,3 +141,36 @@ async def test_sensors_and_daily_tracking(hass: HomeAssistant, freezer: FrozenDa
         await hass.async_block_till_done()
         flows = hass.config_entries.flow.async_progress()
         assert any(f["context"]["source"] == "reauth" for f in flows)
+
+
+async def test_session_token_from_page():
+    """The reader page's embedded deviceToken block is used as the ADP token."""
+    page = ('<script> var bookMetadata = null;\n var deviceToken = {"deviceName":"DEVICE NAME",'
+            '"deviceSessionToken":"enc:abc==","eid":"x"};\n</script>')
+    start = '{"lastPageReadData":{"deviceName":"Paperwhite","position":172321,"syncTime":1795524871162},"metadataUrl":"https://s3/meta.jsonp"}'
+    meta = 'loadMetadata({"startPosition":0,"endPosition":344642})'
+    calls = []
+
+    class Resp:
+        def __init__(self, code, text):
+            self.status_code, self.text, self.headers = code, text, {}
+
+    async def fake_get(url, headers=None, **kw):
+        calls.append((url, dict(headers or {})))
+        if "startReading" in url:
+            if headers.get("x-adp-session-token") != "enc:abc==":
+                return Resp(401, '{"Message":"The given request is not an ADP session request."}')
+            return Resp(200, start)
+        if "meta.jsonp" in url:
+            return Resp(200, meta)
+        if "?asin=" in url:
+            return Resp(200, page)
+        return Resp(404, "")
+
+    c = KindleClient("read.amazon.co.uk", {"session-id": "1", "at-acbuk": "2"}, "")
+    c._session.get = fake_get
+    p = await c.async_get_progress("B0HKTKYX57")
+    await c.async_close()
+    assert p.percent == 50.0 and p.device_name == "Paperwhite"
+    assert p.sync_time.year == 2026
+    assert any("read.amazon.co.uk/?asin=B0HKTKYX57" in u for u, _ in calls)

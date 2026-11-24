@@ -43,24 +43,22 @@ Notes:
 2. Download **Kindle Reading** and restart Home Assistant.
 3. Settings → Devices & services → **Add integration** → Kindle Reading.
 
-## Getting the cookies and device token (once, on a computer)
+## Getting the cookie header (once, on a computer)
 
 1. In Chrome or Edge on a computer, sign in at
-   **https://read.amazon.co.uk** (your Kindle library should appear).
-2. Press **F12** (Mac: ⌥⌘I) and open the **Network** tab. Reload the page.
-3. In the filter box type `getDeviceToken`. Click that request, then:
-   - **Headers → Request URL**: right-click → copy. Paste it into
-     **Device token** (the whole URL is fine).
-   - **Headers → Request Headers → cookie**: copy the whole value. Paste it
-     into **Cookie header**.
-4. Pick **Amazon.co.uk** as the store and submit.
-
-If `getDeviceToken` doesn't appear, open any book in the Cloud Reader and
-look again.
+   **https://read.amazon.co.uk** and open any book.
+2. Press **F12** (Mac: ⌥⌘I), open the **Network** tab and reload the page.
+3. Click the first request (the page itself, named like `?asin=...`).
+   Under **Headers → Request Headers**, find **cookie**, right-click it and
+   copy the value.
+4. In Home Assistant add **Kindle Reading**, pick **Amazon.co.uk** and
+   paste the cookie value. Leave **Device token** empty: the integration
+   reads the reader's session token from the book page itself. (Only older
+   Cloud Reader versions needed the `getDeviceToken` URL.)
 
 Cookies normally last months. The integration saves any cookies Amazon
 refreshes. When Amazon does sign the session out, Home Assistant shows a
-**Reconnect** prompt: repeat step 3 and paste the new cookie header.
+**Reconnect** prompt: repeat steps 1-3 and paste the new cookie value.
 
 ## Credits
 

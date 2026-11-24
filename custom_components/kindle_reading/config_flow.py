@@ -64,12 +64,14 @@ async def _validate(region: str, cookies: dict[str, str], token: str) -> tuple[d
     errors: dict[str, str] = {}
     if not has_sign_in_cookies(cookies):
         return {CONF_COOKIES: "missing_cookies"}, None
-    if not token:
-        return {CONF_DEVICE_TOKEN: "invalid_device_token"}, None
     client = KindleClient(REGIONS[region], cookies, token)
     try:
-        await client.async_get_library(1)
-        await client.async_register_device()
+        books = await client.async_get_library(1)
+        if token:
+            await client.async_register_device()
+        if books:
+            # Proves progress can be read (with or without a device token).
+            await client.async_get_progress(books[0].asin)
     except KindleAuthError:
         errors[CONF_COOKIES] = "invalid_auth"
     except KindleDeviceTokenError:
@@ -98,7 +100,7 @@ class KindleConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             region = user_input[CONF_REGION]
             cookies = parse_cookie_header(user_input[CONF_COOKIES])
-            token = parse_device_token(user_input[CONF_DEVICE_TOKEN])
+            token = parse_device_token(user_input.get(CONF_DEVICE_TOKEN) or "")
             errors, ubid = await _validate(region, cookies, token)
             if not errors:
                 await self.async_set_unique_id(f"{region}-{ubid or 'account'}")
@@ -117,7 +119,7 @@ class KindleConfigFlow(ConfigFlow, domain=DOMAIN):
                     )
                 ),
                 vol.Required(CONF_COOKIES): _MULTILINE,
-                vol.Required(CONF_DEVICE_TOKEN): _MULTILINE,
+                vol.Optional(CONF_DEVICE_TOKEN): _MULTILINE,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -135,7 +137,7 @@ class KindleConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             cookies = parse_cookie_header(user_input[CONF_COOKIES])
             raw_token = (user_input.get(CONF_DEVICE_TOKEN) or "").strip()
-            token = parse_device_token(raw_token) if raw_token else entry.data[CONF_DEVICE_TOKEN]
+            token = parse_device_token(raw_token) if raw_token else entry.data.get(CONF_DEVICE_TOKEN, "")
             errors, _ = await _validate(entry.data[CONF_REGION], cookies, token)
             if not errors:
                 return self.async_update_reload_and_abort(

@@ -20,7 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: KindleConfigEntry) -> bo
     client = KindleClient(
         REGIONS[entry.data[CONF_REGION]],
         entry.data[CONF_COOKIES],
-        entry.data[CONF_DEVICE_TOKEN],
+        entry.data.get(CONF_DEVICE_TOKEN, ""),
     )
     coordinator = KindleCoordinator(hass, entry, client)
     try:

@@ -3,11 +3,11 @@
     "step": {
       "user": {
         "title": "Connect your Kindle library",
-        "description": "Uses the same private endpoints as the Kindle Cloud Reader, with your own Amazon sign-in cookies. Read-only. See the README for how to copy the cookies and device token from read.amazon.co.uk.",
+        "description": "Uses the same private endpoints as the Kindle Cloud Reader, with your own Amazon sign-in cookies. Read-only. Open a book at read.amazon.co.uk, then copy the cookie request header from that page's request in your browser's dev tools (see the README). The device token is only needed for older Cloud Reader versions; leave it empty.",
         "data": {
           "region": "Amazon store",
           "cookies": "Cookie header from read.amazon.*",
-          "device_token": "Device token (or the whole getDeviceToken URL)"
+          "device_token": "Device token (optional; the whole getDeviceToken URL is fine)"
         }
       },
       "reauth_confirm": {
@@ -22,7 +22,7 @@
     "error": {
       "missing_cookies": "Those cookies have no Amazon sign-in token (at-...) or session-id. Copy the whole Cookie header from a request to read.amazon.*.",
       "invalid_auth": "Amazon did not accept the cookies. Sign in to the Kindle Cloud Reader again and copy fresh ones.",
-      "invalid_device_token": "Amazon did not accept the device token.",
+      "invalid_device_token": "Amazon wouldn't share reading progress. Add (or refresh) the device token from the getDeviceToken request.",
       "blocked": "Amazon returned a bot check instead of data. Try again later.",
       "cannot_connect": "Could not reach Amazon.",
       "unknown": "Unexpected error. Check the logs."
