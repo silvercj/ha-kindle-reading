@@ -436,10 +436,11 @@ class KindleClient:
         meta_url = info.get("metadataUrl")
         if asin in self._metadata:
             start, end = self._metadata[asin]
-        elif meta_url:
-            start, end = await self._get_metadata(meta_url)
+        else:
+            if meta_url:
+                start, end = await self._get_metadata(meta_url)
             if not end and page.get("end"):
-                end = page["end"]
+                start, end = 0, page["end"]
             if end:
                 self._metadata[asin] = (start, end)
         return BookProgress(
