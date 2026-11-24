@@ -353,6 +353,8 @@ class KindleClient:
         if not isinstance(info, dict):
             raise KindleBlockedError("Progress response was not an object")
         last = info.get("lastPageReadData")
+        if not isinstance(last, dict):
+            _LOGGER.debug("startReading %s keys: %s", asin, sorted(info))
         position: int | None = None
         sync_time = None
         device_name = None

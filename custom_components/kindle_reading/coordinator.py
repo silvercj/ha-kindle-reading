@@ -133,6 +133,10 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
             self._state.setdefault("seeded", False)
         return self._state
 
+    async def async_state_snapshot(self) -> dict[str, Any]:
+        """Stored tracking state, for diagnostics."""
+        return dict(await self._load_state())
+
     async def _fetch(
         self, count: int, state: dict[str, Any]
     ) -> list[tuple[LibraryBook, BookProgress | None]]:
@@ -156,7 +160,18 @@ class KindleCoordinator(DataUpdateCoordinator[KindleData]):
             except KindleError as err:
                 _LOGGER.debug("Progress for %s failed: %s", item.asin, err)
                 progress = None
+            _LOGGER.debug(
+                "Book %s %r origin=%s -> %s",
+                item.asin,
+                item.title[:40],
+                item.origin_type,
+                None
+                if progress is None
+                else f"pos={progress.position} end={progress.end_position} "
+                f"pct={progress.percent} sync={progress.sync_time} dev={progress.device_name}",
+            )
             results.append((item, progress))
+        _LOGGER.debug("Library returned %d books, checked %d", len(library), len(targets))
         return results
 
     async def _async_update_data(self) -> KindleData:
